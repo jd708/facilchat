@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chat Fácil Pro - Tiempo Real con Firebase y Google Auth y Teléfono</title>
+<style>
+  html, body { margin:0; padding:0; width:100%; height:100%; font-family: Arial, sans-serif; background:#e5ddd5; transition: background 0.3s; color:#000; display:flex; flex-direction: column; }
+  header { background:#128C7E; color:white; padding:10px 20px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; position:relative; }
+  .profile { display:flex; align-items:center; }
+  .profile img, #user-pic { border-radius: 50%; width:40px; height:40px; margin-right: 10px; border: 2px solid #fff; background: #fff; }
+  #menu { background:none; border:none; color:white; font-size:24px; cursor:pointer; user-select:none; }
+  #menu-dropdown { display:none; position:absolute; top:60px; right:10px; background:white; color:#333; box-shadow:0 2px 10px rgba(0,0,0,0.2); border-radius:5px; z-index: 10; min-width:240px; }
+  #menu-dropdown a, .color-option { padding:10px 14px; display:block; cursor:pointer; text-decoration:none; color:#128C7E; border-bottom:1px solid #eee; }
+  #menu-dropdown a:hover, .color-option:hover { background:#e0f2f1; }
+  .profile-edit-container { padding:10px 14px; display:flex; gap:8px; align-items:center; }
+  .profile-edit-container input[type="text"] { width:100%; padding:6px 10px; font-size:14px; border:1px solid #ccc; border-radius:6px; }
+  .profile-edit-container button { padding:6px 10px; font-size:14px; background:#128C7E; color:white; border:none; border-radius:6px; cursor:pointer; }
+  .status-bar { display:flex; overflow-x:auto; background:#f0f0f0; padding:6px; gap:8px; flex-shrink:0; }
+  .status { width:52px; height:52px; border-radius:50%; border:2px solid #128C7E; display:flex; align-items:center; justify-content:center; overflow:hidden; cursor:pointer; background:#fff; }
+  .status img, .status video { width:100%; height:100%; object-fit:cover; }
+  .status-popup { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:white; padding:12px; border-radius:12px; z-index:20; text-align:center; box-shadow:0 0 10px rgba(0,0,0,0.3); max-width:90vw; max-height:90vh; overflow:auto; }
+  .status-popup img, .status-popup video { max-width:100%; max-height:70vh; }
+  .chat-window { flex:1; display:flex; flex-direction:column; background:white; border-radius:10px; overflow:hidden; margin:6px auto 12px; max-width:600px; width:100%; }
+  #messages { flex:1; overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:6px; }
+  .message { padding:8px; margin:6px 0; border-radius:10px; max-width:75%; word-break:break-word; font-size:14px; }
+  .sent { background:#DCF8C6; align-self:flex-end; }
+  .received { background:#F1F1F1; align-self:flex-start; }
+  .meta { font-size:11px; opacity:0.6; margin-top:6px; text-align:right; }
+  .input-container { display:flex; gap:6px; padding:10px; flex-shrink:0; align-items:center; }
+  #message-input { flex:1; padding:10px 12px; border-radius:20px; border:1px solid #ccc; font-size:14px; }
+  button { background:#128C7E; color:white; border:none; border-radius:10px; padding:9px 12px; cursor:pointer; font-size:14px; }
+  .button-container { display:flex; justify-content:space-between; gap:8px; padding:8px; }
+  #end-call-btn { background:red; display:none; width:100%; margin:8px 0 0; }
+  #video-area { display:none; flex-direction:column; gap:6px; margin-top:8px; position:relative; max-width:600px; margin-left:auto; margin-right:auto;}
+  #video-area video { width:100%; height:240px; object-fit:cover; border-radius:10px; background:#000; }
+  #video-local { width:120px; height:80px; position:absolute; top:8px; right:8px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.3); z-index:40; }
+  #typing-indicator { padding:6px 10px; font-size:13px; opacity:0.7; max-width:600px; margin: 0 auto 8px; }
+  #record-indicator { display:none; position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:#d32f2f; color:#fff; padding:6px 12px; border-radius:20px; font-size:12px; box-shadow:0 2px 6px rgba(0,0,0,0.3); z-index:50; animation:pulse 1s infinite; }
+  @keyframes pulse { 0%{transform:translateX(-50%) scale(1);} 50%{transform:translateX(-50%) scale(1.1);} 100%{transform:translateX(-50%) scale(1);} }
+
+  #login-phone { background: white; color: #128C7E; padding: 8px 16px; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; margin-left: 10px; font-size: 14px;}
+  #phone-auth-container { max-width: 360px; margin: 20px auto; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); display:none; }
+  #phone-auth-container input { width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 16px;}
+  #phone-auth-container button { width: 100%; padding: 10px; border-radius: 6px; border: none; font-weight: bold; font-size: 16px; cursor: pointer; }
+  #send-code-btn { background:#128C7E; color:white; }
+  #verify-code-btn { background:#4CAF50; color:white; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="profile" id="profile-section" style="display:none;">
+    <img id="profile-img" src="" alt="Perfil" />
+    <div style="display:flex; align-items:center; gap:8px;">
+      <div id="username-display" style="font-weight:600; color:white;">Usuario</div>
+      <small id="presence-text" style="opacity:0.8; color:white;">Desconectado</small>
+    </div>
+  </div>
+  <div id="auth-buttons" style="display:flex; align-items:center;">
+    <button id="login-btn">Iniciar sesión con Google</button>
+    <button id="login-phone">Iniciar sesión con celular</button>
+    <button id="logout-btn" style="display:none">Cerrar sesión</button>
+  </div>
+  <button id="menu" title="Configuración" style="display:none;">⚙️</button>
+</header>
+
+<!-- Contenedor para autenticación con teléfono -->
+<div id="phone-auth-container">
+  <input type="tel" id="phone-number" placeholder="+34 600000000" />
+  <div id="recaptcha-container"></div>
+  <button id="send-code-btn">Enviar código SMS</button>
+  <input type="text" id="verification-code" placeholder="Ingresa el código OTP" style="display:none;" />
+  <button id="verify-code-btn" style="display:none;">Verificar código</button>
+</div>
+
+<div id="menu-dropdown">
+  <a onclick="document.getElementById('status-upload').click()">Subir estado</a>
+  <div class="profile-edit-container">
+    <label for="username-edit-input" style="color:#128C7E; font-weight:bold;">Editar Nombre:</label>
+    <input type="text" id="username-edit-input" placeholder="Nuevo nombre" />
+    <button id="save-username-btn">Guardar</button>
+  </div>
+  <a onclick="alert('Función Cerrada')">Cerrar sesión</a>
+  <div class="color-option" onclick="changeBackgroundColor('#e5ddd5')">Fondo Claro</div>
+  <div class="color-option" onclick="changeBackgroundColor('#212121')">Tema Oscuro</div>
+</div>
+
+<div class="status-bar" id="status-bar"></div>
+<input type="file" id="status-upload" accept="image/*,video/*" style="display:none" />
+<div id="status-popup" class="status-popup"></div>
+
+<div class="chat-window" id="chat-window" style="display:none;">
+  <div id="messages"></div>
+  <div id="typing-indicator"></div>
+  <div class="input-container">
+    <input type="text" id="message-input" placeholder="Escribe un mensaje..." autocomplete="off" />
+    <button type="button" id="send-btn">Enviar</button>
+    <button type="button" onclick="document.getElementById('file-upload').click()" title="Adjuntar archivo">📎</button>
+    <input type="file" id="file-upload" style="display:none" />
+  </div>
+  <div class="button-container">
+    <button id="mic-btn" title="Audio">🎤</button>
+    <button id="location-btn" title="Ubicación">📍</button>
+    <button id="call-btn" title="Llamada">📞</button>
+    <button id="video-call-btn" title="Llamada video">📹</button>
+  </div>
+  <div id="video-area">
+    <video id="remote-video" autoplay playsinline></video>
+    <video id="video-local" autoplay muted playsinline></video>
+    <button id="end-call-btn">Colgar</button>
+  </div>
+</div>
+
+<div id="record-indicator">🔴 Grabando... 0s</div>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-analytics-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+
+<script>
+  // Configuración Firebase
+  const firebaseConfig = {
+    apiKey: "AIzaSyCVOUR7ifRocESK94kzB-QbHZjeI-NViZU",
+    authDomain: "fitchat-9c08e.firebaseapp.com",
+    databaseURL: "https://fitchat-9c08e-default-rtdb.firebaseio.com",
+    projectId: "fitchat-9c08e",
+    storageBucket: "fitchat-9c08e.appspot.com",
+    messagingSenderId: "818035707821",
+    appId: "1:818035707821:web:4564def3bdbb9701ef9b24",
+    measurementId: "G-4VVYZQNKSX"
+  };
+  // Inicializar Firebase
+  firebase.initializeApp(firebaseConfig);
+  try { firebase.analytics(); } catch(e){ /* opcional */ }
+
+  const auth = firebase.auth();
+  const db = firebase.database();
+  const storage = firebase.storage();
+
+  // Elementos DOM
+  const messagesDiv = document.getElementById('messages');
+  const messageInput = document.getElementById('message-input');
+  const sendBtn = document.getElementById('send-btn');
+  const statusUpload = document.getElementById('status-upload');
+  const statusBar = document.getElementById('status-bar');
+  const statusPopup = document.getElementById('status-popup');
+  const fileUpload = document.getElementById('file-upload');
+  const usernameDisplay = document.getElementById('username-display');
+  const menuDropdown = document.getElementById('menu-dropdown');
+  const usernameEditInput = document.getElementById('username-edit-input');
+  const saveUsernameBtn = document.getElementById('save-username-btn');
+  const presenceText = document.getElementById('presence-text');
+  const typingIndicator = document.getElementById('typing-indicator');
+  const profileImg = document.getElementById('profile-img');
+  const profileSection = document.getElementById('profile-section');
+  const authButtons = document.getElementById('auth-buttons');
+  const loginBtn = document.getElementById('login-btn');
+  const loginPhoneBtn = document.getElementById('login-phone');
+  const logoutBtn = document.getElementById('logout-btn');
+  const menuBtn = document.getElementById('menu');
+  const chatWindow = document.getElementById('chat-window');
+
+  const remoteVideo = document.getElementById('remote-video');
+  const localVideo = document.getElementById('video-local');
+  const videoArea = document.getElementById('video-area');
+  const callBtn = document.getElementById('call-btn');
+  const videoCallBtn = document.getElementById('video-call-btn');
+  const endCallBtn = document.getElementById('end-call-btn');
+
+  // Variables para teléfono
+  const phoneAuthContainer = document.getElementById('phone-auth-container');
+  const phoneNumberInput = document.getElementById('phone-number');
+  const sendCodeBtn = document.getElementById('send-code-btn');
+  const verificationCodeInput = document.getElementById('verification-code');
+  const verifyCodeBtn = document.getElementById('verify-code-btn');
+
+  let confirmationResult = null;
+  let localUserId = null;
+
+  // Funciones comunes
+  loginBtn.addEventListener('click', () => {
+    phoneAuthContainer.style.display = 'none';
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).catch(console.error);
+  });
+
+  loginPhoneBtn.addEventListener('click', () => {
+    auth.signOut();
+    phoneAuthContainer.style.display = 'block';
+  });
+
+  logoutBtn.addEventListener('click', () => {
+    auth.signOut();
+  });
+
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      localUserId = user.uid;
+      profileSection.style.display = 'flex';
+      profileImg.src = user.photoURL || 'https://via.placeholder.com/40?text=U';
+      usernameDisplay.textContent = user.displayName || user.phoneNumber || 'Usuario';
+      authButtons.style.display = 'none';
+      menuBtn.style.display = 'block';
+      chatWindow.style.display = 'flex';
+      phoneAuthContainer.style.display = 'none';
+      loadUserName();
+      setOnline();
+      listenMessages();
+      listenTyping();
+      listenStatuses();
+      listenCalls();
+      logoutBtn.style.display = 'inline-block';
+    } else {
+      localUserId = null;
+      profileSection.style.display = 'none';
+      authButtons.style.display = 'flex';
+      menuBtn.style.display = 'none';
+      chatWindow.style.display = 'none';
+      phoneAuthContainer.style.display = 'none';
+      usernameDisplay.textContent = '';
+      logoutBtn.style.display = 'none';
+      clearMessages();
+      setOffline();
+    }
+  });
+
+  // Recaptcha para autenticar teléfono
+  window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+    size: 'invisible',
+    callback: () => sendVerificationCode()
+  });
+
+  sendCodeBtn.addEventListener('click', () => { sendVerificationCode(); });
+
+  async function sendVerificationCode() {
+    const phoneNumber = phoneNumberInput.value;
+    if (!phoneNumber || phoneNumber.length < 10) {
+      alert('Ingresa un número de teléfono válido con código internacional.');
+      return;
+    }
+    try {
+      confirmationResult = await auth.signInWithPhoneNumber(phoneNumber, window.recaptchaVerifier);
+      alert('Código SMS enviado al número ' + phoneNumber);
+      verificationCodeInput.style.display = 'block';
+      verifyCodeBtn.style.display = 'block';
+      sendCodeBtn.disabled = true;
+    } catch (error) {
+      alert('Error enviando código SMS: ' + error.message);
+      window.recaptchaVerifier.render().then(widgetId => grecaptcha.reset(widgetId));
+    }
+  }
+
+  verifyCodeBtn.addEventListener('click', () => { verifyCode(); });
+
+  async function verifyCode() {
+    const code = verificationCodeInput.value;
+    if (!code || code.length < 6) {
+      alert('Ingresa el código OTP recibido.');
+      return;
+    }
+    try {
+      const result = await confirmationResult.confirm(code);
+      alert('Autenticado correctamente con teléfono.');
+    } catch (error) {
+      alert('Código incorrecto o error: ' + error.message);
+    }
+  }
+
+  // Nombre de usuario
+  function loadUserName() {
+    db.ref('users/' + localUserId + '/name').once('value', snap => {
+      const name = snap.val();
+      if(name) {
+        usernameDisplay.textContent = name;
+        usernameEditInput.value = name;
+      } else {
+        usernameDisplay.textContent = auth.currentUser.displayName || 'Usuario';
+      }
+    });
+  }
+
+  saveUsernameBtn.addEventListener('click', () => {
+    const newName = (usernameEditInput.value || '').trim();
+    if (!newName) return alert('Ingresa un nombre válido.');
+    db.ref('users/' + localUserId).update({ name: newName }).then(() => {
+      usernameDisplay.textContent = newName;
+      menuDropdown.style.display = 'none';
+    });
+  });
+
+  // Estado en línea/offline
+  const userRef = () => db.ref('users/' + localUserId);
+  function setOnline() {
+    userRef().update({ online: true });
+    userRef().onDisconnect().update({ online: false, lastSeen: Date.now() });
+  }
+  function setOffline() {
+    userRef().update({ online: false, lastSeen: Date.now() });
+  }
+  window.addEventListener('beforeunload', setOffline);
+
+  // Mensajes
+  sendBtn.addEventListener('click', sendMessage);
+  messageInput.addEventListener('keydown', e => { if(e.key === 'Enter') sendMessage(); });
+  function sendMessage() {
+    const text = (messageInput.value || '').trim();
+    if (!text) return;
+    const msgRef = db.ref('chats/global-chat/messages').push();
+    const message = {
+      id: msgRef.key,
+      sender: localUserId,
+      senderName: usernameDisplay.textContent,
+      text,
+      timestamp: Date.now(),
+      status: 'sent'
+    };
+    msgRef.set(message);
+    messageInput.value = '';
+  }
+
+  const messagesRef = db.ref('chats/global-chat/messages');
+  messagesRef.off();
+  messagesRef.limitToLast(100).on('child_added', snap => { displayOrUpdateMessage(snap.val()); });
+  messagesRef.on('child_changed', snap => { displayOrUpdateMessage(snap.val()); });
+
+  function displayOrUpdateMessage(msg) {
+    let el = document.querySelector('[data-msgid="' + msg.id + '"]');
+    if (!el) {
+      el = document.createElement('div');
+      el.setAttribute('data-msgid', msg.id);
+      el.className = (msg.sender === localUserId) ? 'message sent' : 'message received';
+      el.textContent = `${msg.senderName}: ${msg.text}`;
+      messagesDiv.appendChild(el);
+    } else {
+      el.textContent = `${msg.senderName}: ${msg.text}`;
+    }
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  }
+
+  // Estados multimedia
+  statusUpload.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const fileName = Date.now() + '_' + file.name;
+    const storageRef = storage.ref('status/' + fileName);
+    storageRef.put(file).then(() => {
+      storageRef.getDownloadURL().then(url => {
+        const statusData = { sender: localUserId, timestamp: Date.now() };
+        if (file.type.startsWith('image/')) statusData.imageUrl = url;
+        else if (file.type.startsWith('video/')) statusData.videoUrl = url;
+        db.ref('status').push(statusData);
+      });
+    }).catch(err => alert('Error subiendo estado: ' + err.message));
+  });
+
+  db.ref('status').on('child_added', snap => {
+    const status = snap.val();
+    const statusElement = document.createElement('div');
+    statusElement.className = 'status';
+    if(status.imageUrl){
+      const img = document.createElement('img');
+      img.src = status.imageUrl;
+      statusElement.appendChild(img);
+    } else if(status.videoUrl){
+      const video = document.createElement('video');
+      video.src = status.videoUrl;
+      video.muted = true;
+      video.loop = true;
+      video.autoplay = true;
+      statusElement.appendChild(video);
+    }
+    statusElement.onclick = () => {
+      while(statusPopup.firstChild) statusPopup.removeChild(statusPopup.firstChild);
+      if(status.imageUrl){
+        const imgPopup = document.createElement('img');
+        imgPopup.src = status.imageUrl;
+        statusPopup.appendChild(imgPopup);
+      } else if(status.videoUrl){
+        const videoPopup = document.createElement('video');
+        videoPopup.src = status.videoUrl;
+        videoPopup.controls = true;
+        videoPopup.autoplay = true;
+        statusPopup.appendChild(videoPopup);
+      }
+      statusPopup.style.display = 'block';
+    };
+    statusBar.appendChild(statusElement);
+  });
+
+  statusPopup.addEventListener('click', () => {
+    statusPopup.style.display = 'none';
+  });
+
+  // Indicador de escritura
+  let typingTimeout = null;
+  const typingRef = () => db.ref('typing/global-chat/' + localUserId);
+  function setTyping(on) {
+    if(on){
+      typingRef().set(true);
+      typingRef().onDisconnect().remove();
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => typingRef().remove(), 3000);
+    } else {
+      typingRef().remove();
+      clearTimeout(typingTimeout);
+    }
+  }
+
+  messageInput.addEventListener('input', () => {
+    setTyping(messageInput.value.length > 0);
+  });
+
+  // Mostrar otros usuarios escribiendo
+  db.ref('typing/global-chat').on('value', snap => {
+    const typing = snap.val() || {};
+    const others = Object.keys(typing).filter(k => k !== localUserId);
+    typingIndicator.textContent = others.length ? 'Escribiendo...' : '';
+  });
+
+  // Video llamadas WebRTC simplificadas
+  const callsRef = db.ref('calls');
+  let pc = null;
+  let localStream = null;
+
+  async function getLocalMedia(video = true){
+    if(!localStream){
+      localStream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
+      localVideo.srcObject = localStream;
+    }
+  }
+
+  function createPeerConnection(){
+    pc = new RTCPeerConnection({ iceServers: [{ urls:'stun:stun.l.google.com:19302' }] });
+    pc.ontrack = event => {
+      remoteVideo.srcObject = event.streams[0] || new MediaStream([event.track]);
+    };
+    pc.onicecandidate = e => {
+      if(e.candidate){
+        callsRef.push({ candidate: e.candidate.toJSON(), from: localUserId });
+      }
+    };
+    if(localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  }
+
+  callBtn.onclick = () => startCall(false);
+  videoCallBtn.onclick = () => startCall(true);
+  endCallBtn.onclick = () => endCall();
+
+  async function startCall(video = true){
+    await getLocalMedia(video);
+    createPeerConnection();
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    callsRef.push({ offer, caller: localUserId });
+  }
+
+  function endCall(){
+    pc?.close();
+    pc = null;
+    if(localStream) localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+    remoteVideo.srcObject = null;
+    localVideo.srcObject = null;
+    videoArea.style.display = 'none';
+    endCallBtn.style.display = 'none';
+  }
+
+  callsRef.on('child_added', async snap => {
+    const data = snap.val();
+    if(data && data.offer && !pc){
+      await getLocalMedia(data.offer.video !== false);
+      createPeerConnection();
+      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      snap.ref.parent.push({ answer, responder: localUserId });
+      videoArea.style.display = 'flex';
+      endCallBtn.style.display = 'block';
+    }
+  });
+
+  // Función para cambiar fondo tema claro/oscuro
+  function changeBackgroundColor(color){
+    document.body.style.background = color;
+  }
+</script>
+
+</body>
+</html>
+
+<!-- Línea de comando para importar usuarios con parámetros SCRYPT -->
+<!--
+firebase auth:import users.json --hash-algo=SCRYPT --hash-key=ompGPcc3kzVk/cbZpLD7zcLcPcSiFtUukZItCjRqMkxvJdPABIBKR25fB2+jAfa2iIOn+STus8euXqPi4Fm9QA== --salt-separator=Bw== --rounds=8 --mem-cost=14
+-->
+
